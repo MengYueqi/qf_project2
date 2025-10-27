@@ -5,107 +5,117 @@ from torch.distributions import Normal
 import numpy as np
 
 
-class ActorCritic(nn.Module):
-    def __init__(self, obs_dim, action_dim, hidden_sizes=(32, 32)):
+import torch
+import torch.nn as nn
+from torch.distributions import Normal
+
+
+class ActorNet(nn.Module):
+    def __init__(self, obs_dim, action_dim, hidden_sizes=(256,128)):
         super().__init__()
+
         layers = []
         in_dim = obs_dim
         for h in hidden_sizes:
             layers.append(nn.Linear(in_dim, h))
             layers.append(nn.ReLU())
             in_dim = h
-        self.backbone = nn.Sequential(*layers)
+        self.body = nn.Sequential(*layers)
 
+        # actor 输出均值
         self.mu_head = nn.Linear(in_dim, action_dim)
-        # self.log_std = nn.Parameter(torch.zeros(action_dim))
-        self.log_std = nn.Parameter(torch.zeros(action_dim), requires_grad=False)
 
-        self.v_head = nn.Linear(in_dim, 1)
+        # actor 输出 log_std（可学习的全局参数 or 线性层）
+        # 版本1：全局可学习参数（跟你现在的一样）
+        self.log_std = nn.Parameter(torch.zeros(action_dim))
 
+        # 初始化稍微保守一点
         nn.init.uniform_(self.mu_head.weight, -0.01, 0.01)
         nn.init.constant_(self.mu_head.bias, 0.0)
-        nn.init.uniform_(self.v_head.weight, -0.01, 0.01)
-        nn.init.constant_(self.v_head.bias, 0.0)
 
     def forward(self, obs):
-        x = self.backbone(obs)
-
+        """
+        obs: (batch, obs_dim)
+        return:
+            mu:  (batch, action_dim)
+            std: (batch, action_dim)
+        """
+        x = self.body(obs)
         mu = self.mu_head(x)
-        std = torch.exp(self.log_std)
-
-        v_raw = self.v_head(x)
-        v = torch.tanh(v_raw) * 10.0   # 🔥 critic输出强行限制到 [-10,10]
-
-        return mu, std, v
-
+        std = torch.exp(self.log_std)  # broadcast
+        return mu, std
 
     def act(self, obs):
         """
-        用于 roll 环节：从策略采样一个动作，并且返回 log_prob 和 value
+        采样带tanh squash的动作 + log_prob
         obs: (batch, obs_dim)
-        return dict:
-          action: (batch, action_dim) in [-1,1] after tanh
-          log_prob: (batch,)
-          value: (batch,1)
         """
-        mu, std, v = self.forward(obs)  # mu/std here are pre-tanh
+        mu, std = self.forward(obs)
         dist = Normal(mu, std)
 
-        raw_action = dist.rsample()     # rsample for reparam trick
-        # squash to [-1,1]
-        action = torch.tanh(raw_action)
+        raw_action = dist.rsample()          # (batch, action_dim)
+        action = torch.tanh(raw_action)      # squash到[-1,1]
 
-        # log_prob needs to account for tanh squashing:
-        # log_prob_raw - sum(log(1 - tanh(a)^2))  (change of variable)
-        log_prob_raw = dist.log_prob(raw_action)  # (batch, action_dim)
-        log_prob_raw = log_prob_raw.sum(dim=-1)   # sum over action dims
-
-        # Tanh correction term:
-        # For each dim: log(1 - tanh(x)^2) = log(1 - action^2)
-        # (action = tanh(raw_action))
+        # log_prob 校正tanh
+        log_prob_raw = dist.log_prob(raw_action).sum(dim=-1)
         correction = torch.log(1 - action.pow(2) + 1e-8).sum(dim=-1)
-        log_prob = log_prob_raw - correction
-        # print(action)
+        log_prob = log_prob_raw - correction  # (batch,)
 
-        return {
-            "action": action,
-            "log_prob": log_prob,
-            "value": v,
-        }
+        # 熵（用pre-squash的Normal的熵）
+        entropy = dist.entropy().sum(dim=-1)
+
+        return action, log_prob, entropy
 
     def evaluate_actions(self, obs, actions):
         """
-        用于 PPO 更新阶段：给定旧的 obs 和 旧的 actions，
-        计算新的 log_prob, entropy, value。
-
-        obs:     (batch, obs_dim)
-        actions: (batch, action_dim) already in [-1,1]
-
-        return:
-          log_prob: (batch,)
-          entropy:  (batch,)
-          value:    (batch,1)
+        用于 PPO 更新阶段：
+        给历史 (obs, actions) 算新的 log_prob / entropy
+        obs: (batch, obs_dim)
+        actions: (batch, action_dim) in [-1,1]
         """
-        mu, std, v = self.forward(obs)
+        mu, std = self.forward(obs)
         dist = Normal(mu, std)
 
-        # inverse tanh to recover pre-squash raw_action
-        # raw = atanh(a) = 0.5 * ln((1+a)/(1-a))
-        # clamp for numerical stability
+        # atanh 反推 raw_action
         clipped_actions = torch.clamp(actions, -0.999999, 0.999999)
         raw_action = 0.5 * torch.log((1 + clipped_actions) / (1 - clipped_actions))
 
         log_prob_raw = dist.log_prob(raw_action).sum(dim=-1)
-
         correction = torch.log(1 - actions.pow(2) + 1e-8).sum(dim=-1)
         log_prob = log_prob_raw - correction
 
-        # Entropy of tanh-squashed Normal is trickier.
-        # A common simplification: use the entropy of the pre-squash Normal.
-        # That's fine for PPO as an entropy bonus.
         entropy = dist.entropy().sum(dim=-1)
 
-        return log_prob, entropy, v
+        return log_prob, entropy
+
+
+class CriticNet(nn.Module):
+    def __init__(self, obs_dim, hidden_sizes=(256,128)):
+        super().__init__()
+
+        layers = []
+        in_dim = obs_dim
+        for h in hidden_sizes:
+            layers.append(nn.Linear(in_dim, h))
+            layers.append(nn.ReLU())
+            in_dim = h
+        self.body = nn.Sequential(*layers)
+
+        self.v_head = nn.Linear(in_dim, 1)
+
+        nn.init.uniform_(self.v_head.weight, -0.01, 0.01)
+        nn.init.constant_(self.v_head.bias, 0.0)
+
+    def forward(self, obs):
+        """
+        obs: (batch, obs_dim)
+        return:
+            value: (batch,1)
+        """
+        x = self.body(obs)
+        v = self.v_head(x)
+        return v
+
 
 
 class RolloutBuffer:
@@ -233,47 +243,40 @@ class RolloutBuffer:
 
 
 class PPOAgent:
-    """
-    PPO 算法本体 (不包含环境交互循环)
-    - 持有 ActorCritic
-    - 提供 update() 来执行一次 PPO 参数更新
-    """
-
     def __init__(
         self,
         obs_dim,
         action_dim,
-        actor_critic_hidden=(16,16),
-        lr=3e-4,
+        actor_hidden=(256,128),
+        critic_hidden=(256,256,32),
+        lr=5e-5,
         gamma=0.99,
         gae_lambda=0.95,
         clip_range=0.2,
-        value_coef=0.1,
-        entropy_coef=0.01,
+        value_coef=0.5,
+        entropy_coef=0.001,
         max_grad_norm=0.5,
         device="cpu",
     ):
         self.device = torch.device(device)
 
-        self.model = ActorCritic(
+        # 分离的 Actor / Critic
+        self.actor = ActorNet(
             obs_dim=obs_dim,
             action_dim=action_dim,
-            hidden_sizes=actor_critic_hidden,
+            hidden_sizes=actor_hidden,
         ).to(self.device)
 
-        actor_params = list(self.model.backbone.parameters()) + \
-               list(self.model.mu_head.parameters()) + \
-               [self.model.log_std]
+        self.critic = CriticNet(
+            obs_dim=obs_dim,
+            hidden_sizes=critic_hidden,
+        ).to(self.device)
 
-        critic_params = list(self.model.v_head.parameters())
-
+        # 一个 optimizer 管两个网络的参数（最简单的做法）
         self.optimizer = optim.Adam(
-                [
-                {"params": actor_params,  "lr": lr},         # e.g. lr = 3e-4
-                {"params": critic_params, "lr": lr * 0.1},   # critic 学慢一点，比如 3e-5
-            ]
+            list(self.actor.parameters()) + list(self.critic.parameters()),
+            lr=lr
         )
-
 
         self.gamma = gamma
         self.gae_lambda = gae_lambda
@@ -285,88 +288,43 @@ class PPOAgent:
     @torch.no_grad()
     def choose_action(self, obs_tensor):
         """
-        给环境时步用：
-        obs_tensor: shape (obs_dim,) or (1, obs_dim)
-        return:
-            action (np.array in [-1,1]^action_dim)
-            log_prob (float)
-            value (float)
+        与你原来的接口保持一致，供环境 rollout 使用
+        return: action (np), log_prob (float), value (float)
         """
         if obs_tensor.dim() == 1:
             obs_tensor = obs_tensor.unsqueeze(0)
         obs_tensor = obs_tensor.to(self.device)
 
-        out = self.model.act(obs_tensor)
-        action      = out["action"][0].cpu().numpy()
-        log_prob    = out["log_prob"][0].cpu().item()
-        value       = out["value"][0].cpu().item()
-        return action, log_prob, value
-    
+        # actor 采样动作
+        action_t, logp_t, _entropy_t = self.actor.act(obs_tensor)
+        # critic 估值
+        value_t = self.critic(obs_tensor)
+
+        action_np = action_t[0].cpu().numpy()
+        logp = logp_t[0].cpu().item()
+        value = value_t[0].cpu().item()
+
+        return action_np, logp, value
+
     @torch.no_grad()
-    def choose_action_deterministic(agent, obs_tensor):
-        # 用策略均值 mu 而不是随机采样
+    def choose_action_deterministic(self, obs_tensor):
+        """
+        用于 eval：直接用 actor 的均值的tanh作为动作，而不是采样
+        """
         if obs_tensor.dim() == 1:
             obs_tensor = obs_tensor.unsqueeze(0)
-        obs_tensor = obs_tensor.to(agent.device)
+        obs_tensor = obs_tensor.to(self.device)
 
-        mu, std, v = agent.model.forward(obs_tensor)
-        action = torch.tanh(mu)  # [-1,1]
-        return action[0].cpu().numpy(), v[0].cpu().item()
+        mu, std = self.actor.forward(obs_tensor)
+        action_det = torch.tanh(mu)      # 均值经过tanh
+        value_t = self.critic(obs_tensor)
 
-    def evaluate_agent_once(agent, eval_env, max_steps=1000):
-        obs_np = eval_env.reset()
-        obs = torch.tensor(obs_np, dtype=torch.float32, device=agent.device)
-
-        equity_curve = [0.0]
-        pnl_history = []
-
-        for t in range(max_steps):
-            action_np, value_est = choose_action_deterministic(agent, obs)
-
-            next_obs_np, reward, done, info = eval_env.step(action_np)
-
-            pnl = info["pnl"]       # 真实组合当期收益 (未放大, 未加alpha)
-            pnl_history.append(pnl)
-            equity_curve.append(equity_curve[-1] + pnl)
-
-            obs = torch.tensor(next_obs_np, dtype=torch.float32, device=agent.device)
-
-            if done:
-                break
-
-        equity_curve = np.array(equity_curve[1:])
-        pnl_history = np.array(pnl_history)
-
-        total_return = equity_curve[-1] if len(equity_curve) else 0.0
-        avg_pnl = pnl_history.mean() if len(pnl_history) else 0.0
-        vol_pnl = pnl_history.std() + 1e-8
-        sharpe_like = (avg_pnl / vol_pnl) * np.sqrt(252)
-
-        # 最大回撤
-        running_max = -np.inf
-        drawdowns = []
-        for v in equity_curve:
-            if v > running_max:
-                running_max = v
-            drawdowns.append(running_max - v)
-        max_dd = max(drawdowns) if drawdowns else 0.0
-
-        print("=== EVAL RESULT ===")
-        print(f"Steps traded : {len(pnl_history)}")
-        print(f"Cumulative PnL: {total_return:.6f}")
-        print(f"Mean pnl/step: {avg_pnl:.6f}")
-        print(f"Vol  pnl/step: {vol_pnl:.6f}")
-        print(f"Sharpe-like  : {sharpe_like:.3f}")
-        print(f"Max Drawdown : {max_dd:.6f}")
-
-        return equity_curve, pnl_history
-
+        return (
+            action_det[0].cpu().numpy(),
+            value_t[0].cpu().item()
+        )
 
     def update(self, rollout_buffer, epochs=5, batch_size=64):
-        """
-        用 rollout_buffer 里的数据跑一次 PPO 更新
-        返回一个 dict，包含这次更新的一些指标
-        """
         stats_last = {}
 
         for _ in range(epochs):
@@ -385,11 +343,16 @@ class PPOAgent:
                 adv_b      = adv_b.to(self.device)
                 ret_b      = ret_b.to(self.device)
 
-                # 标准化 advantage
+                # 标准化 advantage（稳定 PPO）
                 adv_b = (adv_b - adv_b.mean()) / (adv_b.std(unbiased=False) + 1e-8)
 
-                new_logp, entropy, new_v = self.model.evaluate_actions(obs_b, act_b)
+                # 1. 重新算 actor 的 log_prob, entropy
+                new_logp, entropy = self.actor.evaluate_actions(obs_b, act_b)
 
+                # 2. critic 新的 value 估计
+                new_v = self.critic(obs_b).squeeze(-1)  # (batch,)
+
+                # PPO ratio
                 ratio = torch.exp(new_logp - old_logp_b)
 
                 unclipped_obj = ratio * adv_b
@@ -400,7 +363,11 @@ class PPOAgent:
                 ) * adv_b
 
                 policy_loss = -torch.min(unclipped_obj, clipped_obj).mean()
-                value_loss  = (new_v.squeeze(-1) - ret_b).pow(2).mean()
+
+                # value loss
+                value_loss  = (new_v - ret_b).pow(2).mean()
+
+                # entropy bonus (encourage exploration)
                 entropy_loss = -entropy.mean()
 
                 loss = (
@@ -411,7 +378,10 @@ class PPOAgent:
 
                 self.optimizer.zero_grad()
                 loss.backward()
-                nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
+                nn.utils.clip_grad_norm_(
+                    list(self.actor.parameters()) + list(self.critic.parameters()),
+                    self.max_grad_norm
+                )
                 self.optimizer.step()
 
                 stats_last = {

@@ -21,7 +21,7 @@ class RealTradingEnv:
         rets: np.ndarray,           # (T, action_dim), float32
         cost_coeff=0.001,
         alpha=100.0,
-        leverage_cap=2.0,
+        leverage_cap=1.0,
         start_index=0,
         end_index=None,
         max_episode_steps=None,

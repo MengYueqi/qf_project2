@@ -9,7 +9,7 @@ def load_real_trading_env(
     obs_fillna=0.0,
     cost_coeff=0.001,
     alpha=100.0,
-    leverage_cap=2.0,
+    leverage_cap=1.0,
     max_episode_steps=200,
     random_start=True,
     feature_dim=25,       # 想保留的总特征维度

@@ -12,7 +12,7 @@ def run_training_loop(
     steps_per_rollout=512,
     ppo_epochs=5,
     batch_size=64,
-    device="cpu",
+    device="mps",
     lr=5e-5,
 ):
     """
@@ -33,7 +33,7 @@ def run_training_loop(
         obs_fillna=0.0,
         cost_coeff=0.001,
         alpha=300.0,
-        leverage_cap=2.0,
+        leverage_cap=1.0,
         max_episode_steps=200,
         random_start=True,
     )
@@ -101,8 +101,10 @@ def run_training_loop(
 
         # 4. 计算GAE, returns，用于 PPO 的目标
         with torch.no_grad():
-            # bootstrap: 用最后一个obs估计 V(s_T)
-            last_v = agent.model.forward(obs.unsqueeze(0).to(device))[2][0].detach()
+            # 用 Critic 估计 rollout 最后一个状态的 V(s_T)，给 GAE bootstrap
+            last_v = agent.critic(
+                obs.unsqueeze(0).to(device)
+            ).squeeze(-1)[0].detach()
 
         buffer.compute_returns_and_advantages(
             last_value=last_v,
@@ -144,7 +146,7 @@ def make_eval_env(features, rets, lookback_days=250):
         rets=rets,
         cost_coeff=0.001,
         alpha=300.0,
-        leverage_cap=2.0,
+        leverage_cap=1.0,
         start_index=start_index,
         end_index=end_index,
         max_episode_steps=lookback_days,
@@ -161,9 +163,9 @@ if __name__ == "__main__":
     np.random.seed(0)
 
     run_training_loop(
-        total_iterations=100,   # PPO 外层循环
+        total_iterations=1000,   # PPO 外层循环
         steps_per_rollout=512,  # 每次收集多少步
-        ppo_epochs=5,           # 用这批数据迭代几次
+        ppo_epochs=10,           # 用这批数据迭代几次
         batch_size=64,
         device="cpu",
     )
