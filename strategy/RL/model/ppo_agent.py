@@ -81,6 +81,7 @@ class ActorCritic(nn.Module):
         # (action = tanh(raw_action))
         correction = torch.log(1 - action.pow(2) + 1e-8).sum(dim=-1)
         log_prob = log_prob_raw - correction
+        # print(action)
 
         return {
             "action": action,

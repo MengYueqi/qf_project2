@@ -58,6 +58,7 @@ class DummyTradingEnv:
         if gross_leverage > self.leverage_cap:
             scale = self.leverage_cap / (gross_leverage + 1e-8)
             action = action * scale
+        print(action)
 
         # 2. 模拟明日真实收益率 (比如随机N(0,1%) )
         true_ret = np.random.normal(0, 0.01, size=self.action_dim).astype(np.float32)
