@@ -1,91 +1,10 @@
 import numpy as np
 import torch
 
-# 从你的已有文件导入
 from ppo_agent import PPOAgent, RolloutBuffer
-
-
-class DummyTradingEnv:
-    """
-    一个极简的模拟多资产交易环境:
-    - obs: 随机因子向量 (类似多股票+市场特征拼一起)
-    - action: 例如长度=5，代表5只股票的目标仓位 [-1,1]
-    - reward: 组合收益 - 换仓成本 (再乘一个放大系数)
-    """
-
-    def __init__(
-        self,
-        obs_dim=40,
-        action_dim=5,
-        cost_coeff=0.001,
-        alpha=100.0,
-        max_steps=200,
-        leverage_cap=2.0,
-    ):
-        self.obs_dim = obs_dim
-        self.action_dim = action_dim
-        self.cost_coeff = cost_coeff
-        self.alpha = alpha
-        self.max_steps = max_steps
-        self.leverage_cap = leverage_cap
-
-        self.prev_w = np.zeros(action_dim, dtype=np.float32)
-        self.step_count = 0
-        self.state = self._rand_state()
-
-    def _rand_state(self):
-        # 模拟“市场状态”的特征向量；这里用N(0,1)
-        return np.random.normal(0, 1, size=self.obs_dim).astype(np.float32)
-
-    def reset(self):
-        self.prev_w = np.zeros(self.action_dim, dtype=np.float32)
-        self.step_count = 0
-        self.state = self._rand_state()
-        return self.state
-
-    def step(self, action):
-        """
-        action: np.array(shape=(action_dim,), range大致在[-1,1])
-        返回:
-            next_obs (np.float32[obs_dim])
-            reward (float)
-            done (bool)
-            info (dict)
-        """
-
-        # 1. 杠杆上限，控制总绝对仓位 ∑|w|
-        gross_leverage = np.abs(action).sum()
-        if gross_leverage > self.leverage_cap:
-            scale = self.leverage_cap / (gross_leverage + 1e-8)
-            action = action * scale
-        # print(action)
-
-        # 2. 模拟明日真实收益率 (比如随机N(0,1%) )
-        true_ret = np.random.normal(0, 0.01, size=self.action_dim).astype(np.float32)
-
-        # 3. 组合收益 pnl = w · r
-        pnl = float((action * true_ret).sum())
-
-        # 4. 调仓成本 ~ 成交冲击/滑点
-        trade_cost = self.cost_coeff * float(np.abs(action - self.prev_w).sum())
-
-        # 5. 奖励，放大到更适合RL训练的尺度
-        reward = self.alpha * (pnl - trade_cost)
-
-        # 6. 状态推进
-        self.prev_w = action.copy()
-        self.state = self._rand_state()
-
-        self.step_count += 1
-        done = self.step_count >= self.max_steps
-
-        info = {
-            "pnl": pnl,
-            "cost": trade_cost,
-            "gross_leverage": float(np.abs(action).sum()),
-        }
-
-        return self.state, reward, done, info
+from data_loader import load_real_trading_env  # <= 新增：真实环境加载器
+from eval_agent import evaluate_agent_once  # <= 新增：评估函数
+from real_env import RealTradingEnv
 
 
 def run_training_loop(
@@ -93,29 +12,46 @@ def run_training_loop(
     steps_per_rollout=512,
     ppo_epochs=5,
     batch_size=64,
-    obs_dim=40,
-    action_dim=5,
     device="cpu",
+    lr=5e-5,
 ):
     """
     total_iterations:   外层训练循环的轮数
     steps_per_rollout:  每一轮从环境里收集多少 step 的数据
     ppo_epochs:         每一轮用这批数据更新几次 PPO
     batch_size:         PPO 的 minibatch 大小
-    obs_dim:            状态向量维度（模拟 factor+仓位信息拼接）
-    action_dim:         动作维度（股票数量 = 我们要分配仓位的数量）
+    device:             "cpu" 或 "cuda"
     """
 
-    # 1. 环境和 Agent
-    env = DummyTradingEnv(obs_dim=obs_dim, action_dim=action_dim)
+    # 0. 先把真实数据环境准备好
+    # 你可以随时改 tickers 顺序 / 选择哪5只股票
+    tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
+
+    env, features, rets, dates = load_real_trading_env(
+        base_path="strategy/RL/data",  # 根据你运行脚本的位置，可能要改成绝对路径
+        tickers=tickers,
+        obs_fillna=0.0,
+        cost_coeff=0.001,
+        alpha=300.0,
+        leverage_cap=2.0,
+        max_episode_steps=200,
+        random_start=True,
+    )
+
+    # 根据真实数据推导维度
+    obs_dim = features.shape[1]      # 全部拼好的特征列数
+    action_dim = len(tickers)        # 我们持仓的股票数 = 动作维度
+
+    # 1. Agent
     agent = PPOAgent(
         obs_dim=obs_dim,
         action_dim=action_dim,
         device=device,
+        lr=lr,
     )
 
     for iteration in range(1, total_iterations + 1):
-        # 2. 新建 rollout buffer
+        # 2. rollout buffer
         buffer = RolloutBuffer(
             buffer_size=steps_per_rollout,
             obs_dim=obs_dim,
@@ -123,23 +59,27 @@ def run_training_loop(
             device=device,
         )
 
-        # 重置环境，开始 rollout
-        obs = torch.tensor(env.reset(), dtype=torch.float32, device=device)
+        # 重置环境
+        obs_np = env.reset()  # np.array(float32, shape=(obs_dim,))
+        obs = torch.tensor(obs_np, dtype=torch.float32, device=device)
 
         ep_reward_sum = 0.0
         ep_step_count = 0
 
-        # 3. 用当前策略 roll 出 steps_per_rollout 步数据
+        # 3. rollout 收集 steps_per_rollout 步
         for step in range(steps_per_rollout):
-            # 策略给一个动作
+            # 策略 → 动作
             action_np, logp, value_pred = agent.choose_action(obs)
+            # action_np: np.array shape=(action_dim,)
+            # logp: float or tensor scalar
+            # value_pred: float (V(s))
 
-            # 环境前进一步
+            # 环境推进
             next_obs_np, reward, done, info = env.step(action_np)
 
-            # 存到 buffer
+            # 写入 buffer
             buffer.add(
-                obs=obs.cpu(),  # buffer 内部会自己再 to(device) 时处理
+                obs=obs.cpu(),  # buffer里会把这些拼起来
                 action=torch.tensor(action_np, dtype=torch.float32),
                 log_prob=torch.tensor(logp, dtype=torch.float32),
                 reward=torch.tensor(reward, dtype=torch.float32),
@@ -152,13 +92,16 @@ def run_training_loop(
 
             # 准备下一步
             obs = torch.tensor(next_obs_np, dtype=torch.float32, device=device)
-            if done:
-                # 如果一条episode结束了，就reset继续采，直到buffer装满
-                obs = torch.tensor(env.reset(), dtype=torch.float32, device=device)
 
-        # 4. GAE + returns 计算 (Critic target / Advantage)
+            if done:
+                # episode结束（比如走完max_episode_steps或走到区间尾部）
+                # 我们开一条新的episode继续填buffer，直到装满steps_per_rollout步
+                obs_np = env.reset()
+                obs = torch.tensor(obs_np, dtype=torch.float32, device=device)
+
+        # 4. 计算GAE, returns，用于 PPO 的目标
         with torch.no_grad():
-            # 取最后一个obs估一下 V(s_T)，用于bootstrap
+            # bootstrap: 用最后一个obs估计 V(s_T)
             last_v = agent.model.forward(obs.unsqueeze(0).to(device))[2][0].detach()
 
         buffer.compute_returns_and_advantages(
@@ -169,7 +112,7 @@ def run_training_loop(
 
         avg_step_reward = ep_reward_sum / max(ep_step_count, 1)
 
-        # 5. 调用 PPO 更新
+        # 5. PPO更新
         stats = agent.update(
             rollout_buffer=buffer,
             epochs=ppo_epochs,
@@ -186,19 +129,41 @@ def run_training_loop(
             f"ret_mean={stats['ret_mean']:.4f}"
         )
 
+     # 训练结束后评估
+    eval_env, si, ei = make_eval_env(features, rets, lookback_days=250)
+    evaluate_agent_once(agent, eval_env, max_steps=250)
+
+def make_eval_env(features, rets, lookback_days=250):
+    # 用最后 lookback_days 天窗口来评估
+    T = len(features)
+    start_index = max(0, T - lookback_days - 1)  # -1 给一步forward room
+    end_index   = T - 2                          # -2 因为 env 里会用 idx+1
+
+    eval_env = RealTradingEnv(
+        features=features,
+        rets=rets,
+        cost_coeff=0.001,
+        alpha=300.0,
+        leverage_cap=2.0,
+        start_index=start_index,
+        end_index=end_index,
+        max_episode_steps=lookback_days,
+        random_start=False,   # <--- 评估时关键：不要随机起点！
+    )
+
+    return eval_env, start_index, end_index
+
+
 
 if __name__ == "__main__":
-    # 固定随机种子，让结果更可复现一些
+    # 固定随机种子，增加可复现性
     torch.manual_seed(0)
     np.random.seed(0)
 
-    # 直接跑一小段训练看输出
     run_training_loop(
-        total_iterations=100,      # 训练多少轮
-        steps_per_rollout=512,    # 每一轮roll多少步
-        ppo_epochs=5,             # 每一轮做几次PPO update
-        batch_size=64,            # PPO minibatch大小
-        obs_dim=40,               # 状态向量长度(模拟市场特征+仓位特征)
-        action_dim=5,             # 股票数量/仓位维度
-        device="cpu",             # 没GPU就用"cpu"
+        total_iterations=100,   # PPO 外层循环
+        steps_per_rollout=512,  # 每次收集多少步
+        ppo_epochs=5,           # 用这批数据迭代几次
+        batch_size=64,
+        device="cpu",
     )

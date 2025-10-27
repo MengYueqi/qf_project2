@@ -2,21 +2,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions import Normal
+import numpy as np
 
 
 class ActorCritic(nn.Module):
-    """
-    Shared backbone MLP, then:
-    - policy_head: outputs mean for each asset
-    - value_head : outputs scalar V(s)
-
-    动作空间: 连续 [-1, 1]^n_assets
-    我们这里让 Actor 输出高斯分布的 mean/std，然后会用 tanh 去 squash 成 [-1,1]
-    """
-
-    def __init__(self, obs_dim, action_dim, hidden_sizes=(256, 128)):
+    def __init__(self, obs_dim, action_dim, hidden_sizes=(32, 32)):
         super().__init__()
-
         layers = []
         in_dim = obs_dim
         for h in hidden_sizes:
@@ -25,35 +16,28 @@ class ActorCritic(nn.Module):
             in_dim = h
         self.backbone = nn.Sequential(*layers)
 
-        # Actor head: 输出动作均值
         self.mu_head = nn.Linear(in_dim, action_dim)
+        # self.log_std = nn.Parameter(torch.zeros(action_dim))
+        self.log_std = nn.Parameter(torch.zeros(action_dim), requires_grad=False)
 
-        # log_std 可以是全局可学习参数，也可以是按状态输出。
-        # 这里用全局参数（更稳定一些）。
-        self.log_std = nn.Parameter(torch.zeros(action_dim))
-
-        # Critic head: 输出状态价值 V(s)
         self.v_head = nn.Linear(in_dim, 1)
 
-        # 初始化可稍微缩小输出范围，避免一开始太激进
         nn.init.uniform_(self.mu_head.weight, -0.01, 0.01)
         nn.init.constant_(self.mu_head.bias, 0.0)
         nn.init.uniform_(self.v_head.weight, -0.01, 0.01)
         nn.init.constant_(self.v_head.bias, 0.0)
 
     def forward(self, obs):
-        """
-        obs: (batch, obs_dim) float32 tensor
-        return:
-            mu:      (batch, action_dim)
-            std:     (batch, action_dim)
-            value:   (batch, 1)
-        """
         x = self.backbone(obs)
-        mu = self.mu_head(x)          # unrestricted, will tanh later at sample time
-        std = torch.exp(self.log_std) # broadcastable
-        v = self.v_head(x)
+
+        mu = self.mu_head(x)
+        std = torch.exp(self.log_std)
+
+        v_raw = self.v_head(x)
+        v = torch.tanh(v_raw) * 10.0   # 🔥 critic输出强行限制到 [-10,10]
+
         return mu, std, v
+
 
     def act(self, obs):
         """
@@ -214,6 +198,18 @@ class RolloutBuffer:
 
         self.returns[:buffer_size] = self.advantages[:buffer_size] + self.values[:buffer_size]
 
+        # === advantage 标准化 + clamp 防数值爆炸 ===
+        adv = self.advantages[:buffer_size]
+        adv = (adv - adv.mean()) / (adv.std() + 1e-8)
+        adv = torch.clamp(adv, -100.0, 100.0)
+
+        rets = self.returns[:buffer_size]
+        rets = torch.clamp(rets, -1e3, 1e3)
+
+        self.advantages[:buffer_size] = adv
+        self.returns[:buffer_size] = rets
+
+
     def get(self, batch_size):
         """
         一个简单的mini-batch iterator
@@ -247,12 +243,12 @@ class PPOAgent:
         self,
         obs_dim,
         action_dim,
-        actor_critic_hidden=(256,128),
+        actor_critic_hidden=(16,16),
         lr=3e-4,
         gamma=0.99,
         gae_lambda=0.95,
         clip_range=0.2,
-        value_coef=0.5,
+        value_coef=0.1,
         entropy_coef=0.01,
         max_grad_norm=0.5,
         device="cpu",
@@ -265,7 +261,19 @@ class PPOAgent:
             hidden_sizes=actor_critic_hidden,
         ).to(self.device)
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+        actor_params = list(self.model.backbone.parameters()) + \
+               list(self.model.mu_head.parameters()) + \
+               [self.model.log_std]
+
+        critic_params = list(self.model.v_head.parameters())
+
+        self.optimizer = optim.Adam(
+                [
+                {"params": actor_params,  "lr": lr},         # e.g. lr = 3e-4
+                {"params": critic_params, "lr": lr * 0.1},   # critic 学慢一点，比如 3e-5
+            ]
+        )
+
 
         self.gamma = gamma
         self.gae_lambda = gae_lambda
@@ -293,6 +301,66 @@ class PPOAgent:
         log_prob    = out["log_prob"][0].cpu().item()
         value       = out["value"][0].cpu().item()
         return action, log_prob, value
+    
+    @torch.no_grad()
+    def choose_action_deterministic(agent, obs_tensor):
+        # 用策略均值 mu 而不是随机采样
+        if obs_tensor.dim() == 1:
+            obs_tensor = obs_tensor.unsqueeze(0)
+        obs_tensor = obs_tensor.to(agent.device)
+
+        mu, std, v = agent.model.forward(obs_tensor)
+        action = torch.tanh(mu)  # [-1,1]
+        return action[0].cpu().numpy(), v[0].cpu().item()
+
+    def evaluate_agent_once(agent, eval_env, max_steps=1000):
+        obs_np = eval_env.reset()
+        obs = torch.tensor(obs_np, dtype=torch.float32, device=agent.device)
+
+        equity_curve = [0.0]
+        pnl_history = []
+
+        for t in range(max_steps):
+            action_np, value_est = choose_action_deterministic(agent, obs)
+
+            next_obs_np, reward, done, info = eval_env.step(action_np)
+
+            pnl = info["pnl"]       # 真实组合当期收益 (未放大, 未加alpha)
+            pnl_history.append(pnl)
+            equity_curve.append(equity_curve[-1] + pnl)
+
+            obs = torch.tensor(next_obs_np, dtype=torch.float32, device=agent.device)
+
+            if done:
+                break
+
+        equity_curve = np.array(equity_curve[1:])
+        pnl_history = np.array(pnl_history)
+
+        total_return = equity_curve[-1] if len(equity_curve) else 0.0
+        avg_pnl = pnl_history.mean() if len(pnl_history) else 0.0
+        vol_pnl = pnl_history.std() + 1e-8
+        sharpe_like = (avg_pnl / vol_pnl) * np.sqrt(252)
+
+        # 最大回撤
+        running_max = -np.inf
+        drawdowns = []
+        for v in equity_curve:
+            if v > running_max:
+                running_max = v
+            drawdowns.append(running_max - v)
+        max_dd = max(drawdowns) if drawdowns else 0.0
+
+        print("=== EVAL RESULT ===")
+        print(f"Steps traded : {len(pnl_history)}")
+        print(f"Cumulative PnL: {total_return:.6f}")
+        print(f"Mean pnl/step: {avg_pnl:.6f}")
+        print(f"Vol  pnl/step: {vol_pnl:.6f}")
+        print(f"Sharpe-like  : {sharpe_like:.3f}")
+        print(f"Max Drawdown : {max_dd:.6f}")
+
+        return equity_curve, pnl_history
+
 
     def update(self, rollout_buffer, epochs=5, batch_size=64):
         """
