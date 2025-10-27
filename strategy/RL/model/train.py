@@ -58,7 +58,7 @@ class DummyTradingEnv:
         if gross_leverage > self.leverage_cap:
             scale = self.leverage_cap / (gross_leverage + 1e-8)
             action = action * scale
-        print(action)
+        # print(action)
 
         # 2. 模拟明日真实收益率 (比如随机N(0,1%) )
         true_ret = np.random.normal(0, 0.01, size=self.action_dim).astype(np.float32)
@@ -194,7 +194,7 @@ if __name__ == "__main__":
 
     # 直接跑一小段训练看输出
     run_training_loop(
-        total_iterations=10,      # 训练多少轮
+        total_iterations=100,      # 训练多少轮
         steps_per_rollout=512,    # 每一轮roll多少步
         ppo_epochs=5,             # 每一轮做几次PPO update
         batch_size=64,            # PPO minibatch大小
