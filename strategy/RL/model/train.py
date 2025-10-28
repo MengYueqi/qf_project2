@@ -26,6 +26,7 @@ def run_training_loop(
     # 0. 先把真实数据环境准备好
     # 你可以随时改 tickers 顺序 / 选择哪5只股票
     tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
+    
 
     env, features, rets, dates = load_real_trading_env(
         base_path="strategy/RL/data",  # 根据你运行脚本的位置，可能要改成绝对路径

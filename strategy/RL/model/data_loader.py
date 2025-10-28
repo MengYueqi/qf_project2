@@ -9,6 +9,8 @@ def load_real_trading_env(
     obs_fillna=0.0,
     cost_coeff=0.001,
     alpha=100.0,
+    start_index=0,
+    end_index=None,
     leverage_cap=1.0,
     max_episode_steps=200,
     random_start=True,
@@ -122,15 +124,24 @@ def load_real_trading_env(
     else:
         features = features_full.astype(np.float32)
 
+    if end_index is None:
+        end_index = len(features) - 2
+
+    # TODO: end_index 耦合进 load_real_trading_env, 需改为参数传入
+    # 用最后 lookback_days 天窗口来评估
+    T = len(features)
+    lookback_days=250
+    end_index = max(0, T - lookback_days - 1)  # -1 给一步forward room
+
     # -------- 6. 创建环境 --------
     env = RealTradingEnv(
         features=features.astype(np.float32),
         rets=rets.astype(np.float32),
         cost_coeff=cost_coeff,
         alpha=alpha,
+        start_index=start_index,
         leverage_cap=leverage_cap,
-        start_index=0,
-        end_index=len(features) - 2,
+        end_index=end_index,
         max_episode_steps=max_episode_steps,
         random_start=random_start,
     )
