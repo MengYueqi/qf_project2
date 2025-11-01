@@ -6,6 +6,7 @@ from data_loader import load_real_trading_env  # <= 新增：真实环境加载�
 from eval_agent import evaluate_agent_once  # <= 新增：评估函数
 from real_env import RealTradingEnv
 
+# TODO: 这里定义所有参数，目前参数耦合混乱
 
 def run_training_loop(
     total_iterations=10,
@@ -26,6 +27,8 @@ def run_training_loop(
     # 0. 先把真实数据环境准备好
     # 你可以随时改 tickers 顺序 / 选择哪5只股票
     tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
+    
+    # HACK: 目前数据集 split 需要靠耦合进函数的 start_index 和 end_index 来实现，没法使用比例直接划分
 
     env, features, rets, dates = load_real_trading_env(
         base_path="strategy/RL/data",  # 根据你运行脚本的位置，可能要改成绝对路径
