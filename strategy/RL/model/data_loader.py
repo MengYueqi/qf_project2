@@ -4,7 +4,7 @@ import numpy as np
 from real_env import RealTradingEnv
 
 def load_real_trading_env(
-    base_path="strategy/RL/data",
+    base_path="strategy/RL/data_zjh",
     tickers=None,
     obs_fillna=0.0,
     cost_coeff=0.001,
@@ -94,6 +94,7 @@ def load_real_trading_env(
     ).astype(np.float32)  # 确保 float32
 
     next_prices_noisy = next_prices * (1.0 + noise)
+    next_prices_noisy = next_prices
 
     # 拼接 [带噪声明日价格 | 其他因子特征]
     features_full = np.concatenate(
