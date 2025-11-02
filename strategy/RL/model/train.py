@@ -31,7 +31,7 @@ def run_training_loop(
     # HACK: 目前数据集 split 需要靠耦合进函数的 start_index 和 end_index 来实现，没法使用比例直接划分
 
     env, features, rets, dates = load_real_trading_env(
-        base_path="strategy/RL/data",  # 根据你运行脚本的位置，可能要改成绝对路径
+        base_path="strategy/RL/data_zjh",  # 根据你运行脚本的位置，可能要改成绝对路径
         tickers=tickers,
         obs_fillna=0.0,
         cost_coeff=0.001,
@@ -64,6 +64,7 @@ def run_training_loop(
 
         # 重置环境
         obs_np = env.reset()  # np.array(float32, shape=(obs_dim,))
+        episode_rewards = []
         obs = torch.tensor(obs_np, dtype=torch.float32, device=device)
 
         ep_reward_sum = 0.0
@@ -92,7 +93,7 @@ def run_training_loop(
 
             ep_reward_sum += reward
             ep_step_count += 1
-
+            episode_rewards.append(reward)
             # 准备下一步
             obs = torch.tensor(next_obs_np, dtype=torch.float32, device=device)
 
@@ -102,6 +103,12 @@ def run_training_loop(
                 obs_np = env.reset()
                 obs = torch.tensor(obs_np, dtype=torch.float32, device=device)
 
+        # # 在 episode 结束后打印统计量
+        # print(f"[DEBUG]Reward scale: mean={np.mean(episode_rewards):.3f}, "
+        #     f"std={np.std(episode_rewards):.3f}, "
+        #     f"min={np.min(episode_rewards):.3f}, "
+        #     f"max={np.max(episode_rewards):.3f}")
+        
         # 4. 计算GAE, returns，用于 PPO 的目标
         with torch.no_grad():
             # 用 Critic 估计 rollout 最后一个状态的 V(s_T)，给 GAE bootstrap
@@ -136,7 +143,12 @@ def run_training_loop(
 
      # 训练结束后评估
     eval_env, si, ei = make_eval_env(features, rets, lookback_days=250)
-    evaluate_agent_once(agent, eval_env, max_steps=250)
+    evaluate_agent_once(agent, 
+                        eval_env, 
+                        max_steps=250,
+                        benchmark_csvs=["strategy/RL/data/standard_price/sp500.csv", "strategy/RL/data/standard_price/spy.csv"],
+                        benchmark_names=["SPY", "S&P500 (^GSPC)"],
+                        )
 
 def make_eval_env(features, rets, lookback_days=250):
     # 用最后 lookback_days 天窗口来评估
@@ -166,7 +178,7 @@ if __name__ == "__main__":
     np.random.seed(0)
 
     run_training_loop(
-        total_iterations=1000,   # PPO 外层循环
+        total_iterations=1024,   # PPO 外层循环
         steps_per_rollout=512,  # 每次收集多少步
         ppo_epochs=10,           # 用这批数据迭代几次
         batch_size=64,

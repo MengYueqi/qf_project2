@@ -4,7 +4,7 @@ import numpy as np
 from real_env import RealTradingEnv
 
 def load_real_trading_env(
-    base_path="strategy/RL/data_zjh",
+    base_path="",
     tickers=None,
     obs_fillna=0.0,
     cost_coeff=0.001,
@@ -101,6 +101,8 @@ def load_real_trading_env(
         [next_prices_noisy, features_raw],
         axis=1
     ).astype(np.float32)  # ⭐ 关键：保证最终是 float32
+
+    print("DEBUG: features_full shape:", features_full.shape)
 
     # -------- 5. 特征选择逻辑 --------
     if feature_dim is not None and feature_dim < features_full.shape[1]:

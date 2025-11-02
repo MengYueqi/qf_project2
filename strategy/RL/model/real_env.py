@@ -114,12 +114,14 @@ class RealTradingEnv:
             and self.episode_steps >= self.max_episode_steps
         )
         done = bool(done_due_to_time or done_due_to_horizon)
+        # print(f"DEBUG: start_index={self.start_index}, curr_idx={self.curr_idx}, gap_idx={self.curr_idx - self.start_index}, end_index={self.end_index}, done={done}")
 
         info = {
             "pnl": pnl,
             "cost": trade_cost,
             "gross_leverage": float(np.abs(action).sum()),
-            "t_index": int(self.curr_idx),
+            "t_index": int(self.curr_idx - self.start_index),
         }
+
 
         return next_obs, reward, done, info

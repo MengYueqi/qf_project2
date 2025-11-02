@@ -211,10 +211,10 @@ class RolloutBuffer:
         # === advantage 标准化 + clamp 防数值爆炸 ===
         adv = self.advantages[:buffer_size]
         adv = (adv - adv.mean()) / (adv.std() + 1e-8)
-        adv = torch.clamp(adv, -100.0, 100.0)
+        # adv = torch.clamp(adv, -100.0, 100.0)
 
         rets = self.returns[:buffer_size]
-        rets = torch.clamp(rets, -1e3, 1e3)
+        # rets = torch.clamp(rets, -1e3, 1e3)
 
         self.advantages[:buffer_size] = adv
         self.returns[:buffer_size] = rets
