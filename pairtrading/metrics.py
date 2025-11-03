@@ -2,7 +2,35 @@ import numpy as np
 
 
 def compute_pair_metrics(res):
+    """
+    Compute key performance metrics for a pairs trading backtest.
 
+    Parameters
+    ----------
+    res : pd.DataFrame
+        DataFrame containing at least two columns:
+        - 'strategy_ret' : daily log returns of the strategy
+        - 'cumret'       : cumulative log returns
+
+    Returns
+    -------
+    dict
+        {
+            "CumulativeReturn": total geometric return,
+            "AnnualizedReturn": annualized geometric return,
+            "AnnualVolatility": annualized standard deviation of daily returns,
+            "SharpeRatio": annualized Sharpe ratio (risk-free rate assumed 0),
+            "MaxDrawdown": minimum drawdown (in decimal form),
+            "WinRate": fraction of days with positive returns,
+            "Days": number of trading days
+        }
+
+    Notes
+    -----
+    - All returns are computed in log space for consistency.
+    - The Sharpe ratio uses a 252-day convention.
+    - Max drawdown is derived from the equity curve (exp(cumret)).
+    """
     daily_ret = res["strategy_ret"].dropna()
     n_days = len(daily_ret)
 
