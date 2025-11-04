@@ -20,9 +20,12 @@ def backtest_pair(pred_df, actual_df, pair_row, z_entry=1.0, z_exit=0.5):
     idx = pred.index.intersection(act.index)
     pred = pred.loc[idx]; act = act.loc[idx]
 
-    # spread and z
     spread_pred = np.log(pred[s1]) - beta * np.log(pred[s2])
-    z = (spread_pred - mu) / sigma
+    sigma_dynamic = spread_pred.rolling(window=60).std().fillna(spread_pred.std())
+    z = (spread_pred - mu) / sigma_dynamic
+
+    # spread_pred = np.log(pred[s1]) - beta * np.log(pred[s2])
+    # z = (spread_pred - mu) / sigma
 
     pos1, pos2 = [], []
     cur1 = 0.0; cur2 = 0.0
