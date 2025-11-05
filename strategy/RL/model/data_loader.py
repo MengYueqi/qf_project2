@@ -4,7 +4,7 @@ import numpy as np
 from real_env import RealTradingEnv
 
 def load_real_trading_env(
-    base_path="strategy/RL/data",
+    base_path="",
     tickers=None,
     obs_fillna=0.0,
     cost_coeff=0.001,
@@ -14,16 +14,17 @@ def load_real_trading_env(
     leverage_cap=1.0,
     max_episode_steps=200,
     random_start=True,
-    feature_dim=30,       # 想保留的总特征维度
-    random_feature_select=True,  # 是否随机选因子列
-    seed=42,                # 固定随机种子方便复现
+    feature_dim=25,
+    random_feature_select=True,
+    seed=42,
+    use_predicted=True,     # ⭐ 新增：是否加载 predict 下的预测价格
 ):
     if tickers is None:
         tickers = ["AAPL","MSFT","GOOGL","AMZN","NVDA"]
 
     np.random.seed(seed)
 
-    # -------- 1. 价格和预测价格 --------
+    # -------- 1. 真实价格 --------
     price_dfs = []
     for t in tickers:
         fp = os.path.join(base_path, "close_price", f"{t}.csv")
@@ -77,65 +78,56 @@ def load_real_trading_env(
     full_df = full_df.fillna(obs_fillna)
 
     # -------- 4. 对齐 --------
-    features_raw = (
-        full_df.drop(columns=["Date"])
-        .iloc[:-1]
-        .to_numpy(dtype=np.float32)
-    )
-
-    rets = (
-        rets_df[tickers]
-        .iloc[1:]
-        .to_numpy(dtype=np.float32)
-    )
-
-    next_prices = (
-        pred_price_df[tickers]
-        .iloc[1:]
-        .to_numpy(dtype=np.float32)
-    )
-
+    features_raw = full_df.drop(columns=["Date"]).iloc[:-1].to_numpy(dtype=np.float32)
+    rets = rets_df[tickers].iloc[1:].to_numpy(dtype=np.float32)
     aligned_dates = full_df["Date"].iloc[:-1].reset_index(drop=True)
 
     assert features_raw.shape[0] == rets.shape[0], "特征和收益行数必须对齐"
 
-    # ===== 价格扰动 =====
-    noise_scale = 0.05  # 5% 噪声
-    noise = np.random.normal(
-        loc=0.0,
-        scale=noise_scale,
-        size=next_prices.shape
-    ).astype(np.float32)  # 确保 float32
+    # -------- 5. 加载 next_prices --------
+    if use_predicted:
+        # ⭐ 从 predict 文件夹加载
+        pred_dfs = []
+        for t in tickers:
+            fp = os.path.join(base_path, "predict", f"{t}.csv")
+            df = pd.read_csv(fp, parse_dates=["Date"])
+            # 统一列名
+            col_name = [c for c in df.columns if c.lower() != "date"][0]
+            df = df[["Date", col_name]].rename(columns={col_name: t})
+            pred_dfs.append(df)
 
-    next_prices_noisy = next_prices * (1.0 + noise)
-    next_prices_noisy = next_prices
-    curr_prices = price_df[tickers].iloc[:-1].to_numpy(dtype=np.float32)
+        pred_df = pred_dfs[0]
+        for df in pred_dfs[1:]:
+            pred_df = pd.merge(pred_df, df, on="Date", how="outer")
 
-    # 拼接 [带噪声明日价格 | 其他因子特征]
-    features_full = np.concatenate(
-        [curr_prices, next_prices_noisy, features_raw],
-        axis=1
-    ).astype(np.float32)  # ⭐ 关键：保证最终是 float32
+        pred_df = pred_df.sort_values("Date").reset_index(drop=True)
+        pred_df = pred_df.fillna(method="ffill").fillna(method="bfill")
 
-    # -------- 5. 特征选择逻辑 --------
+        next_prices = pred_df[tickers].iloc[1:].to_numpy(dtype=np.float32)
+        print("✅ 使用预测价格 (predict/) 作为 next_prices")
+
+    else:
+        # 原逻辑：使用真实价格
+        next_prices = price_df[tickers].iloc[1:].to_numpy(dtype=np.float32)
+        print("✅ 使用真实价格 (close_price/) 作为 next_prices")
+
+    # 拼接 [未来价格 | 其他因子特征]
+    features_full = np.concatenate([next_prices, features_raw], axis=1).astype(np.float32)
+    # features_full = np.concatenate([features_raw], axis=1).astype(np.float32)
+    print("DEBUG: features_full shape:", features_full.shape)
+
+    # -------- 6. 特征选择 --------
     if feature_dim is not None and feature_dim < features_full.shape[1]:
-        keep_base = 10  # 前十列是当前价格和下日带噪价格，必须保留
+        keep_base = 5
         num_extra = feature_dim - keep_base
 
         all_indices = np.arange(keep_base, features_full.shape[1])
         if random_feature_select:
-            chosen_extra = np.random.choice(
-                all_indices,
-                size=num_extra,
-                replace=False
-            )
+            chosen_extra = np.random.choice(all_indices, size=num_extra, replace=False)
         else:
             chosen_extra = all_indices[:num_extra]
 
-        selected_indices = np.concatenate(
-            [np.arange(keep_base), np.sort(chosen_extra)]
-        )
-
+        selected_indices = np.concatenate([np.arange(keep_base), np.sort(chosen_extra)])
         features = features_full[:, selected_indices].astype(np.float32)
     else:
         features = features_full.astype(np.float32)
@@ -143,13 +135,10 @@ def load_real_trading_env(
     if end_index is None:
         end_index = len(features) - 2
 
-    # TODO: end_index 耦合进 load_real_trading_env, 需改为参数传入
-    # 用最后 lookback_days 天窗口来评估
     T = len(features)
-    lookback_days=250
-    end_index = max(0, T - lookback_days - 1)  # -1 给一步forward room
+    lookback_days = 250
+    end_index = max(0, T - lookback_days - 1)
 
-    # -------- 6. 创建环境 --------
     env = RealTradingEnv(
         features=features.astype(np.float32),
         rets=rets.astype(np.float32),
@@ -163,6 +152,7 @@ def load_real_trading_env(
     )
 
     return env, features, rets, aligned_dates
+
 
 
 if __name__ == "__main__":
