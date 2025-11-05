@@ -31,13 +31,27 @@ def load_real_trading_env(
         df = pd.read_csv(fp, parse_dates=["Date"])
         df = df[["Date", df.columns[1]]].rename(columns={df.columns[1]: t})
         price_dfs.append(df)
+    
+    pred_price_dfs = []
+    for t in tickers:
+        fp = os.path.join(base_path, "predict", f"{t}.csv")
+        df = pd.read_csv(fp, parse_dates=["Date"])
+        df = df[["Date", df.columns[1]]].rename(columns={df.columns[1]: t})
+        pred_price_dfs.append(df)
 
     price_df = price_dfs[0]
     for df in price_dfs[1:]:
         price_df = pd.merge(price_df, df, on="Date", how="outer")
 
+    pred_price_df = pred_price_dfs[0]
+    for df in pred_price_dfs[1:]:
+        pred_price_df = pd.merge(pred_price_df, df, on="Date", how="outer")
+
     price_df = price_df.sort_values("Date").reset_index(drop=True)
     price_df = price_df.fillna(method="ffill").fillna(method="bfill").fillna(0.0)
+
+    pred_price_df = pred_price_df.sort_values("Date").reset_index(drop=True)
+    pred_price_df = pred_price_df.fillna(method="ffill").fillna(method="bfill").fillna(0.0)
 
     # -------- 2. 收益率 --------
     rets_df = price_df.copy()
