@@ -81,6 +81,7 @@ def evaluate_agent_once(
     for _ in range(max_steps):
         action_np, _ = agent.choose_action_deterministic(obs)
         next_obs_np, reward, done, info = env.step(action_np)
+        # print(f"DEBUG Eval step: action={action_np}, info={info}")
 
         step_pnl = float(info["pnl"])
         pnl_history.append(step_pnl)
