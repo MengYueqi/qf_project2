@@ -14,7 +14,7 @@ pip install pywavelets  # for wavelet denoising
 
 ```
 
-## 下面这里不要写output 我们上传的是还没有运行的代码
+
 
 ## File Construction
 
