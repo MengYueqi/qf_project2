@@ -29,6 +29,7 @@ pip install pywavelets  # for wavelet denoising
 ## Data Download
 
 The data download module fetches historical stock price data from Yahoo Finance for the following 10 technology stocks:
+```
 Apple (AAPL)
 Microsoft (MSFT)
 Alphabet (GOOGL)
@@ -39,6 +40,7 @@ Netflix (NFLX)
 Broadcom (AVGO)
 Oracle (ORCL)
 Tesla (TSLA)
+```
 
 run the code download.py to download or the required data.
 
@@ -70,6 +72,9 @@ Each CSV file includes:
 ### Data Source
 
 All data is sourced from Yahoo Finance via the `yfinance` Python library
+
+## CNN-BiLSTM Model
+
 
 ## xLSTM Model
 
