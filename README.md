@@ -188,15 +188,15 @@ For each selected pair, the main notebook:
    - close positions when \(|z| < z_{\text{exit}}\).
 
 5. **Constructs a static buy-and-hold benchmark**: long 1 unit of stock1 and short β units of stock2.
-6. 
-7. **Computes performance metrics**, including:
+
+6. **Computes performance metrics**, including:
    - cumulative return,  
    - annualized return and volatility,  
    - Sharpe ratio,  
    - maximum drawdown,  
    - win rate.
 
-8. **Generates plots** for strategy vs benchmark comparison.
+7. **Generates plots** for strategy vs benchmark comparison.
 
 ### Outputs
 
