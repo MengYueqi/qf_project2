@@ -10,19 +10,17 @@ pip install yfinance pandas-datareader
 pip install torch torchvision torchaudio tqdm
 pip install pywavelets  # for wavelet denoising
 ```
-
+##下面这里不要写output 我们上传的是还没有运行的代码
 ## File Construction
 ```
 ├── download
 ├── download.py
-├── GRU
-   └──prediction_spilt.ipynb
-   └──output
-      └──diag_price_all
+├── GRU/
+│      └──prediction_spilt.ipynb
 ├──LSTM/
-      └── LSTM.py 
+│      └── LSTM.py 
 ├── xlstm
-      └──
+│      └──
 ├── Strategy(RL)
 ├── pairstrading/
 │   ├── loaddata.py               # load & align data
