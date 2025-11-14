@@ -1,5 +1,7 @@
 # DSA 5205 Project 2
+
 ## Installation
+
 Prerequisites
 
 Python 3.10 or higher
@@ -10,8 +12,11 @@ pip install yfinance pandas-datareader
 pip install torch torchvision torchaudio tqdm
 pip install pywavelets  # for wavelet denoising
 ```
-##下面这里不要写output 我们上传的是还没有运行的代码
+
+## 下面这里不要写output 我们上传的是还没有运行的代码
+
 ## File Construction
+
 ```
 ├── download
 ├── download.py
@@ -22,6 +27,15 @@ pip install pywavelets  # for wavelet denoising
 ├── xlstm
 │   └──
 ├── Strategy(RL)
+│   ├── log
+│   ├── model
+│   │   ├── __pycache__
+│   │   ├── data_loader.py        # data loading script
+│   │   ├── eval_agent.py         # Evaluation agent code
+│   │   ├── ppo_agent.py          # Core code of the agent model based on the PPO algorithm
+│   │   ├── real_env.py           # Realistic environment simulation
+│   │   └── train.py              # Model training script
+│   └── test_data
 ├── pairstrading/
 │   ├── loaddata.py               # load & align data
 │   ├── selectpairs.py            # cointegration test
@@ -34,10 +48,10 @@ pip install pywavelets  # for wavelet denoising
 ├── .gitclone
 ```
 
-
 ## Data Download
 
 The data download module fetches historical stock price data from Yahoo Finance for the following 10 technology stocks:
+
 ```
 Apple (AAPL)
 Microsoft (MSFT)
@@ -54,7 +68,9 @@ Tesla (TSLA)
 run the code download.py to download or the required data.
 
 ### Raw Data Structure
+
 After running `download.py`, the generated `download` folder will contain:
+
 ```
 download/
 ├── all_factors_complete.csv
@@ -65,6 +81,7 @@ download/
 ```
 
 Each CSV file includes:
+
 - Date
 - Open, High, Low, Close prices
 - Adjusted Close
@@ -83,16 +100,18 @@ Each CSV file includes:
 All data is sourced from Yahoo Finance via the `yfinance` Python library
 
 ## CNN-BiLSTM Model
+
 A deep learning system for stock price prediction using CNN-BiLSTM with online calibration.
 
 ### Quickstart
 
 Run the code to train the model and generate predictions:
+
 ```bash
 python LSTM.py
 ```
-The code will process all tickers in the dataset and generate predictions with visualizations in the `output_final` directory.
 
+The code will process all tickers in the dataset and generate predictions with visualizations in the `output_final` directory.
 
 ### Output
 
@@ -107,20 +126,22 @@ output_final/
 ├── ...
 └── OOS_summary.csv             # Performance summary for all tickers
 ```
+
 ### Performance Metrics
 
 The `OOS_summary.csv` file contains:
+
 - **MSE**: Mean squared error
 - **R2_TEST**: Out-of-sample R² score
 - **IC**: Information coefficient (correlation)
 - **HitRate**: Directional accuracy
 - **Sharpe**: Annualized Sharpe ratio
 
-
 ## xLSTM-TS Model
 
 run the code ```xlstm.py``` to use the xLSTM-TS model and get the visualization
-* For better representation I put the code in the ```xlstm file```, so I strongly suggest you to run ```download.py``` in this file or use ```mv``` and other copy method to move the ```download file``` into this ```xlstm file```
+
+- For better representation I put the code in the ```xlstm file```, so I strongly suggest you to run ```download.py``` in this file or use ```mv``` and other copy method to move the ```download file``` into this ```xlstm file```
 Then you can run the shell:
 
 ```
@@ -144,7 +165,6 @@ Every output csv include two columns: Date and PredictedPrice.
 
 Our GRU module forecasts **next-day closing prices** for the tech stocks using a multi-feature, sequence model.
 
-
 ### What the notebook does
 
 For each ticker, the notebook:
@@ -153,15 +173,15 @@ For each ticker, the notebook:
    All features are lagged by one trading day to avoid look-ahead.
 2. **Splits the sample in time**
 
-   * Train: up to 2020-12-31
-   * Validation: 2021-01-01 to 2022-12-31
-   * Test (out-of-sample): 2023-01-01 onwards
+   - Train: up to 2020-12-31
+   - Validation: 2021-01-01 to 2022-12-31
+   - Test (out-of-sample): 2023-01-01 onwards
 3. **Trains a 2-layer GRU** (sequence length ≈ 20 days) with an early-stopping rule on the validation loss.
 4. **Produces a price forecast path** for the test window by:
 
-   * predicting the next-day direction internally,
-   * mapping that signal into a small next-day move,
-   * chaining the moves into a synthetic close-price series.
+   - predicting the next-day direction internally,
+   - mapping that signal into a small next-day move,
+   - chaining the moves into a synthetic close-price series.
 
    > We only use and report **price-level forecasts and metrics**; the intermediate return step is not the final target.
 
@@ -169,12 +189,10 @@ For each ticker, the notebook:
 
 Running the notebook populates `GRU/output/` with:
 
-* `{TICKER}.csv` – predicted close prices for the test period.
-* `{TICKER}_TEST_curve.png` – actual vs predicted close price plot.
-* `OOS_summary.csv` – per-ticker out-of-sample metrics (price MSE, price-level (R^2), price-level IC, hit rate on price direction, and a simple directional Sharpe).
-* `diag_price_all/` – optional diagnostic plots for rolling hit-rate, IC, MSE and relative price error.
-
-
+- `{TICKER}.csv` – predicted close prices for the test period.
+- `{TICKER}_TEST_curve.png` – actual vs predicted close price plot.
+- `OOS_summary.csv` – per-ticker out-of-sample metrics (price MSE, price-level (R^2), price-level IC, hit rate on price direction, and a simple directional Sharpe).
+- `diag_price_all/` – optional diagnostic plots for rolling hit-rate, IC, MSE and relative price error.
 
 ## Pairs Trading
 
@@ -215,8 +233,8 @@ The module is organized as one main notebook plus several small Python files:
 - **`plotpairs.py`**  
    Plots strategy vs buy-and-hold benchmark,
 
-
 ### What the main notebook does
+
 The main notebook first loads two datasets:
 
 - **`close.csv`**  
@@ -260,17 +278,76 @@ For each selected pair, the main notebook:
 ### Outputs
 
 Running `main.ipynb` produces:
-   - `pair_df` – selected cointegrated pairs with β, μ, σ and p-values.
-   - **Performance summary tables** – strategy vs benchmark metrics across pairs.  
-   - **Plots** – return curves and visual comparisons of the strategy and benchmark.
 
+- `pair_df` – selected cointegrated pairs with β, μ, σ and p-values.
+- **Performance summary tables** – strategy vs benchmark metrics across pairs.  
+- **Plots** – return curves and visual comparisons of the strategy and benchmark.
 
+## Trading strategies based on the PPO algorithm
 
+### Running method
 
+To run the PPO-based trading strategies, follow the steps below.
 
+### **1. Create and activate the Conda environment**
 
+```bash
+conda create -n ppo_trading python=3.10 -y
+conda activate ppo_trading
+```
 
+### **2. Install all dependencies using pip**
 
+You can find the requirements file in the `strategy/RL/requirements.txt`, you can use following command to install the requirements:
 
+```bash
+pip install -r requirements.txt
+```
 
+### **3. Navigate to the PPO strategy directory**
 
+All RL modules are located in:
+
+```
+qf_project2/strategy/RL
+```
+
+However, **you must run all scripts from the project root** to ensure path correctness.
+
+### **4. Run the PPO training script**
+
+You can use following command to train the model:
+
+```bash
+python strategy/RL/model/train.py
+```
+
+We use the data at `strategy/RL/data_zjh` to train the RL model. You can use the redirct command to redirct the training log, like:
+
+```bash
+python strategy/RL/model/train.py > strategy/RL/log/zjh.log
+```
+
+During training, you will see the logs similar to:
+
+```log
+[Iter 01] avg_step_reward= -0.3954  policy_loss=0.0221  value_loss=92.2691  entropy=7.0913  ret_mean=-7.7123
+[Iter 02] avg_step_reward= -0.5117  policy_loss=0.0064  value_loss=81.4336  entropy=7.0905  ret_mean=-10.6071
+[Iter 03] avg_step_reward= -0.4817  policy_loss=0.0246  value_loss=86.3729  entropy=7.0924  ret_mean=-15.5884
+[Iter 04] avg_step_reward= -0.5152  policy_loss=0.0037  value_loss=81.3029  entropy=7.0941  ret_mean=-20.5431
+[Iter 05] avg_step_reward= -0.4649  policy_loss=0.0447  value_loss=52.9585  entropy=7.0959  ret_mean=-20.3484
+[Iter 06] avg_step_reward= -0.4177  policy_loss=-0.0353  value_loss=69.9531  entropy=7.0977  ret_mean=-22.0404
+[Iter 07] avg_step_reward= -0.2686  policy_loss=0.0336  value_loss=74.1395  entropy=7.0938  ret_mean=-22.2068
+```
+
+The PPO loop will continue printing each epoch’s policy loss, value loss, entropy, and ret_mean. At the end of training, a final summary line will appear, such as:
+
+```log
+=== EVAL RESULT (Strategy vs. Benchmarks) ===
+Steps traded: 249
+[Strategy]   CumPnL=0.200373 | Sharpe*=1.149 | MaxDD=0.182365
+[Buy&Hold]          SPY | CumPnL=0.250830 | Sharpe*=1.769 | MaxDD=0.123319
+[Buy&Hold] S&P500 (^GSPC) | CumPnL=0.270771 | Sharpe*=1.899 | MaxDD=0.120807
+```
+
+You can view the model performance by this matrix.
