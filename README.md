@@ -19,7 +19,7 @@ pip install pywavelets  # for wavelet denoising
 │   └──prediction_spilt.ipynb
 ├──LSTM/
 │   └── LSTM.py 
-├── xlstm/
+├── xlstm_ts/
 │   └── xlstm.py
 │   └── output_xlstm (this is the result file)
 ├── Strategy(RL)
@@ -121,7 +121,7 @@ The `OOS_summary.csv` file contains:
 ## xLSTM-TS Model
 
 run the code ```xlstm.py``` to use the xLSTM-TS model and get the visualization
-* For better representation I put the code in the ```xlstm file```, so I strongly suggest you to run ```download.py``` in this file or use ```mv``` and other copy method to move the ```download file``` into this ```xlstm file```
+* For better representation I put the code in the ```xlstm_ts file```, so I strongly suggest you to run ```download.py``` in this file or use ```mv``` and other copy method to move the ```download file``` into ```xlstm_ts file```
 Then you can run the shell:
 
 ```
