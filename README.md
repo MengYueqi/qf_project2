@@ -219,6 +219,16 @@ The module is organized as one main notebook plus several small Python files:
 
 
 ### What the main notebook does
+The main notebook first loads two datasets:
+
+- **`close.csv`**  
+  Actual daily close prices for all tickers used in the project.  
+  Contains a `Date` column and one column per stock.
+
+- **`predicted.csv`**  
+  Next-day predicted close prices generated from the model outputs in  
+  `LSTM/outputs/`, 'xlstm/outputs/' and `GRU/outputs/`.  
+  For each data input, predictions from the three models are averaged.
 
 For each selected pair, the main notebook:
 
