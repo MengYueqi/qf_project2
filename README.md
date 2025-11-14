@@ -90,4 +90,53 @@ download/
 ...
 ```
 
+## GRU Model
+
+Our GRU module forecasts **next-day closing prices** for the tech stocks using a multi-feature, sequence model.
+
+### Files and dependencies
+
+- Main notebook: `GRU/prediction_split.ipynb`
+- Input data: `download/price_data_full.csv` (two-level header `[PriceField, Ticker]`)
+- Outputs: written to `GRU/output/`
+
+In addition to the base packages listed above, the GRU notebook uses:
+
+```bash
+pip install torch torchvision torchaudio scikit-learn tqdm
+````
+
+### What the notebook does
+
+For each ticker, the notebook:
+
+1. **Builds features** from daily OHLCV data (returns, momentum/technical indicators, volatility and volume signals).
+   All features are lagged by one trading day to avoid look-ahead.
+2. **Splits the sample in time**
+
+   * Train: up to 2020-12-31
+   * Validation: 2021-01-01 to 2022-12-31
+   * Test (out-of-sample): 2023-01-01 onwards
+3. **Trains a 2-layer GRU** (sequence length ≈ 20 days) with an early-stopping rule on the validation loss.
+4. **Produces a price forecast path** for the test window by:
+
+   * predicting the next-day direction internally,
+   * mapping that signal into a small next-day move,
+   * chaining the moves into a synthetic close-price series.
+
+   > We only use and report **price-level forecasts and metrics**; the intermediate return step is not the final target.
+
+### How to run
+
+Open `GRU/prediction_split.ipynb` in Jupyter/VS Code and run all cells in order.
+
+### Outputs
+
+Running the notebook populates `GRU/output/` with:
+
+* `{TICKER}.csv` – predicted close prices for the test period.
+* `{TICKER}_TEST_curve.png` – actual vs predicted close price plot.
+* `OOS_summary.csv` – per-ticker out-of-sample metrics (price MSE, price-level (R^2), price-level IC, hit rate on price direction, and a simple directional Sharpe).
+* `diag_price_all/` – optional diagnostic plots for rolling hit-rate, IC, MSE and relative price error.
+
 
