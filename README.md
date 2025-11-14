@@ -111,6 +111,8 @@ The `OOS_summary.csv` file contains:
 ## xLSTM Model
 
 run the code ```xlstm.py``` to use the xLSTM-TS model and get the visualization
+* For better representation I put the code in the ```xlstm file```, so I strongly suggest you to run ```download.py``` in this file or use ```mv``` and other copy method to move the ```download file``` into this ```xlstm file```
+Then you can run the shell:
 
 ```
 python xlstm.py
