@@ -73,7 +73,7 @@ All data is sourced from Yahoo Finance via the `yfinance` Python library
 
 ## xLSTM Model
 
-run the code xlstm.py to use the xLSTM-TS model and get the visualization
+run the code ```xlstm.py``` to use the xLSTM-TS model and get the visualization
 
 ```
 python xlstm.py
