@@ -19,7 +19,7 @@ pip install pywavelets  # for wavelet denoising
 ## File Construction
 
 ```
-├── download (this file will be generated after running ```download.py```)
+├── download (Actually this file will be generated after running ```download.py```)
 ├── download.py
 ├── GRU/
 │   └──prediction_spilt.ipynb
@@ -27,6 +27,7 @@ pip install pywavelets  # for wavelet denoising
 │   └── LSTM.py 
 ├── xlstm_ts/
 │   └── xlstm.py
+│   └── download.py (STRONGLY suggested to copy the code here)
 ├── Strategy(RL)
 │   ├── log
 │   ├── model
@@ -47,6 +48,7 @@ pip install pywavelets  # for wavelet denoising
 │   ├── main.ipynb                # end-to-end pipeline notebook
 ├── README.md
 ├── .gitclone
+├── requirement.txt
 ```
 
 ## Data Download
