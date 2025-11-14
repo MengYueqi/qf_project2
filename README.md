@@ -74,6 +74,38 @@ Each CSV file includes:
 All data is sourced from Yahoo Finance via the `yfinance` Python library
 
 ## CNN-BiLSTM Model
+A deep learning system for stock price prediction using CNN-BiLSTM with online calibration.
+
+### Quickstart
+
+Run the code to train the model and generate predictions:
+```bash
+python LSTM.py
+```
+The code will process all tickers in the dataset and generate predictions with visualizations in the `output_final` directory.
+
+
+### Output
+
+The code generates the following files in `output_final/`:
+
+```
+output_final/
+├── AAPL.csv                    # Predicted prices for AAPL
+├── AAPL_TEST_curve.png         # Actual vs Predicted visualization
+├── MSFT.csv                    # Predicted prices for MSFT
+├── MSFT_TEST_curve.png         # Actual vs Predicted visualization
+├── ...
+└── OOS_summary.csv             # Performance summary for all tickers
+```
+### Performance Metrics
+
+The `OOS_summary.csv` file contains:
+- **MSE**: Mean squared error
+- **R2_TEST**: Out-of-sample R² score
+- **IC**: Information coefficient (correlation)
+- **HitRate**: Directional accuracy
+- **Sharpe**: Annualized Sharpe ratio
 
 
 ## xLSTM Model
