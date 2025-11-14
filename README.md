@@ -20,6 +20,7 @@ pip install pywavelets  # for wavelet denoising
 ├── LSTM
 ├── xLSTM
 ├── Strategy(RL)
+├── pairtrading
 ├── README.md
 ├── gitclone
 ```
