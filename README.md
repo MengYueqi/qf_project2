@@ -11,6 +11,7 @@ pip install pandas numpy matplotlib scikit-learn requests
 pip install yfinance pandas-datareader
 pip install torch torchvision torchaudio tqdm
 pip install pywavelets  # for wavelet denoising
+
 ```
 
 ## 下面这里不要写output 我们上传的是还没有运行的代码
@@ -18,14 +19,14 @@ pip install pywavelets  # for wavelet denoising
 ## File Construction
 
 ```
-├── download
+├── download (this file will be generated after running ```download.py```)
 ├── download.py
 ├── GRU/
 │   └──prediction_spilt.ipynb
 ├──LSTM/
 │   └── LSTM.py 
-├── xlstm
-│   └──
+├── xlstm_ts/
+│   └── xlstm.py
 ├── Strategy(RL)
 │   ├── log
 │   ├── model
@@ -140,8 +141,7 @@ The `OOS_summary.csv` file contains:
 ## xLSTM-TS Model
 
 run the code ```xlstm.py``` to use the xLSTM-TS model and get the visualization
-
-- For better representation I put the code in the ```xlstm file```, so I strongly suggest you to run ```download.py``` in this file or use ```mv``` and other copy method to move the ```download file``` into this ```xlstm file```
+* For better representation I put the code in the ```xlstm_ts file```, so I strongly suggest you to run ```download.py``` in this file or use ```mv``` and other copy method to move the ```download file``` into ```xlstm_ts file```
 Then you can run the shell:
 
 ```
@@ -159,7 +159,11 @@ download/
 ...
 ```
 
-Every output csv include two columns: Date and PredictedPrice.
+Every ticker-output csv include two columns: Date and PredictedPrice.
+And a summary csv ```OOS_summary.csv``` performs the evaluation of the model, include:
+```
+Ticker | MES | R2_TEST | IC | HitRate | Sharpe | TEST_start | TEST_end | #TEST_days
+```
 
 ## GRU Model
 
