@@ -7,16 +7,18 @@ Python 3.10 or higher
 ```
 pip install pandas numpy matplotlib scikit-learn requests
 pip install yfinance pandas-datareader
-pip install torch torchvision torchaudio
+pip install torch torchvision torchaudio tqdm
 pip install pywavelets  # for wavelet denoising
 ```
 
 ## File Construction
 ```
-../
 ├── download
 ├── download.py
 ├── GRU
+   └──prediction_spilt.ipynb
+   └──output
+      └──diag_price_all
 ├──LSTM/
       └── LSTM.py 
 ├── xlstm
