@@ -16,11 +16,11 @@ pip install pywavelets  # for wavelet denoising
 ├── download
 ├── download.py
 ├── GRU/
-│      └──prediction_spilt.ipynb
+│   └──prediction_spilt.ipynb
 ├──LSTM/
-│      └── LSTM.py 
+│   └── LSTM.py 
 ├── xlstm
-│      └──
+│   └──
 ├── Strategy(RL)
 ├── pairstrading/
 │   ├── loaddata.py               # load & align data
