@@ -123,5 +123,95 @@ Running the notebook populates `GRU/output/` with:
 * `{TICKER}_TEST_curve.png` – actual vs predicted close price plot.
 * `OOS_summary.csv` – per-ticker out-of-sample metrics (price MSE, price-level (R^2), price-level IC, hit rate on price direction, and a simple directional Sharpe).
 * `diag_price_all/` – optional diagnostic plots for rolling hit-rate, IC, MSE and relative price error.
+* 
+
+
+
+## Pairs Trading
+
+### Python files and notebook
+
+The module is organized as one main notebook plus several small Python files:
+
+- **`main.ipynb`**  
+  Orchestrates the full workflow:
+  - loads data,  
+  - builds the cointegration universe,  
+  - defines `pairs_to_use`,  
+  - runs the backtest and benchmark,  
+  - computes metrics and produces plots.
+
+- **`loaddata.py`**  
+  Helper functions to load and align:
+  - historical close prices,  
+  - ML-predicted next-day prices (mean of 3 models).
+
+- **`selectpairs.py`**  
+  Implements pair selection:
+  - filters by overlapping dates and minimum sample length,  
+  - runs the Engle–Granger cointegration test,  
+  - outputs a `pair_df` with stock1, stock2, β, μ, σ, p-values.
+
+- **`backtest.py`**  
+  Implements the mean-reversion trading strategy
+
+- **`buyandhold.py`**  
+  Defines the static benchmark:
+  - long 1 unit of stock1 and short β units of stock2,  
+  - returns daily and cumulative log returns of this long–short portfolio.
+
+- **`metrics.py`**  
+  Collects performance metrics
+
+- **`plotpairs.py`**  
+   Plots strategy vs buy-and-hold benchmark,
+
+
+### What the main notebook does
+
+For each selected pair, the main notebook:
+
+1. **Builds the cointegration universe** using daily log close prices  
+   - keeps only overlapping dates for each pair,  
+   - applies the Engle–Granger test,  
+   - estimates the hedge ratio (β), spread mean (μ), and spread volatility (σ).
+
+2. **Loads ML-predicted prices** for the out-of-sample period.  
+
+3. **Computes predicted spreads and z-scores**, using:
+   - predicted next-day prices,  
+   - historical β, μ, σ from the training window.  
+
+4. **Runs a rule-based trading strategy**:
+   - short the spread when \(z > z_{\text{entry}}\),  
+   - long the spread when \(z < -z_{\text{entry}}\),  
+   - close positions when \(|z| < z_{\text{exit}}\).
+
+5. **Constructs a static buy-and-hold benchmark**: long 1 unit of stock1 and short β units of stock2.
+6. 
+7. **Computes performance metrics**, including:
+   - cumulative return,  
+   - annualized return and volatility,  
+   - Sharpe ratio,  
+   - maximum drawdown,  
+   - win rate.
+
+8. **Generates plots** for strategy vs benchmark comparison.
+
+### Outputs
+
+Running `main.ipynb` produces:
+   - `pair_df` – selected cointegrated pairs with β, μ, σ and p-values.
+   - **Performance summary tables** – strategy vs benchmark metrics across pairs.  
+   - **Plots** – return curves and visual comparisons of the strategy and benchmark.
+
+
+
+
+
+
+
+
+
 
 
