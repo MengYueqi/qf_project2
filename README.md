@@ -13,14 +13,15 @@ pip install pywavelets  # for wavelet denoising
 ##下面这里不要写output 我们上传的是还没有运行的代码
 ## File Construction
 ```
-├── download
+├── download (this file will be generated after running ```download.py```)
 ├── download.py
 ├── GRU/
 │   └──prediction_spilt.ipynb
 ├──LSTM/
 │   └── LSTM.py 
-├── xlstm
-│   └──
+├── xlstm/
+│   └── xlstm.py
+│   └── output_xlstm (this is the result file)
 ├── Strategy(RL)
 ├── pairstrading/
 │   ├── loaddata.py               # load & align data
@@ -138,7 +139,11 @@ download/
 ...
 ```
 
-Every output csv include two columns: Date and PredictedPrice.
+Every ticker-output csv include two columns: Date and PredictedPrice.
+And a summary csv ```OOS_summary.csv``` performs the evaluation of the model, include:
+```
+Ticker | MES | R2_TEST | IC | HitRate | Sharpe | TEST_start | TEST_end | #TEST_days
+```
 
 ## GRU Model
 
