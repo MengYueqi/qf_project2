@@ -18,11 +18,11 @@ pip install pywavelets  # for wavelet denoising
 ├── download,py
 ├── GRU
 ├── LSTM
-├── xLSTM
+├── xlstm
 ├── Strategy(RL)
 ├── pairtrading
 ├── README.md
-├── gitclone
+├── .gitclone
 ```
 
 
