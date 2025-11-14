@@ -168,7 +168,6 @@ Running the notebook populates `GRU/output/` with:
 * `{TICKER}_TEST_curve.png` – actual vs predicted close price plot.
 * `OOS_summary.csv` – per-ticker out-of-sample metrics (price MSE, price-level (R^2), price-level IC, hit rate on price direction, and a simple directional Sharpe).
 * `diag_price_all/` – optional diagnostic plots for rolling hit-rate, IC, MSE and relative price error.
-* 
 
 
 
