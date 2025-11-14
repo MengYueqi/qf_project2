@@ -24,7 +24,14 @@ pip install pywavelets  # for wavelet denoising
 ├── xlstm
       └──
 ├── Strategy(RL)
-├── pairtrading
+├── pairstrading/
+│   ├── loaddata.py               # load & align data
+│   ├── selectpairs.py            # cointegration test
+│   ├── backtest.py               # backtest using predicted spreads
+│   ├── buyandhold.py             # long–short benchmark
+│   ├── metrics.py                # performance statistics
+│   ├── plotpairs.py              # visualization
+│   ├── main.ipynb                # end-to-end pipeline notebook
 ├── README.md
 ├── .gitclone
 ```
