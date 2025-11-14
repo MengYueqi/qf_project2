@@ -1,0 +1,4 @@
+pip install pandas numpy matplotlib scikit-learn requests
+pip install yfinance pandas-datareader
+pip install torch torchvision torchaudio tqdm
+pip install pywavelets  # for wavelet denoising
