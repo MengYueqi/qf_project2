@@ -94,17 +94,6 @@ download/
 
 Our GRU module forecasts **next-day closing prices** for the tech stocks using a multi-feature, sequence model.
 
-### Files and dependencies
-
-- Main notebook: `GRU/prediction_split.ipynb`
-- Input data: `download/price_data_full.csv` (two-level header `[PriceField, Ticker]`)
-- Outputs: written to `GRU/output/`
-
-In addition to the base packages listed above, the GRU notebook uses:
-
-```bash
-pip install torch torchvision torchaudio scikit-learn tqdm
-````
 
 ### What the notebook does
 
@@ -125,10 +114,6 @@ For each ticker, the notebook:
    * chaining the moves into a synthetic close-price series.
 
    > We only use and report **price-level forecasts and metrics**; the intermediate return step is not the final target.
-
-### How to run
-
-Open `GRU/prediction_split.ipynb` in Jupyter/VS Code and run all cells in order.
 
 ### Outputs
 
