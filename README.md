@@ -129,8 +129,7 @@ download/
 ...
 ```
 
-### Output csv
-Include two columns: Date and PredictedPrice.
+Every output csv include two columns: Date and PredictedPrice.
 
 ## GRU Model
 
