@@ -9,6 +9,7 @@ pip install pandas numpy matplotlib scikit-learn requests
 pip install yfinance pandas-datareader
 pip install torch torchvision torchaudio tqdm
 pip install pywavelets  # for wavelet denoising
+
 ```
 ##下面这里不要写output 我们上传的是还没有运行的代码
 ## File Construction
@@ -21,7 +22,6 @@ pip install pywavelets  # for wavelet denoising
 │   └── LSTM.py 
 ├── xlstm_ts/
 │   └── xlstm.py
-│   └── output_xlstm (this is the result file)
 ├── Strategy(RL)
 ├── pairstrading/
 │   ├── loaddata.py               # load & align data
