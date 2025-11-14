@@ -13,7 +13,7 @@ from collections import deque
 
 tqdm.monitor_interval = 0
 
-# ---------------- Config ----------------
+# ---------------- Configuration ----------------
 START_FROM_IDX = 0
 
 DATA_DIR   = "./download"  
@@ -27,11 +27,11 @@ END        = None
 TRAIN_END = "2020-12-31"
 VAL_END   = "2022-12-31"   # After VAL_END is Testing
 
-# Sequence and rolling
+# Sequence and rolling window parameters
 SEQ_LEN        = 30  # Match your original SEQUENCE_LENGTH
 MIN_TRAIN_DAYS = 40
 
-# Training
+# Training hyperparameters
 BATCH_SIZE   = 32
 LR           = 1e-3
 WEIGHT_DECAY = 1e-4
@@ -112,8 +112,9 @@ class SimpleAdamW:
             v_hat = st["v"] / (1 - b2**t)
             p.data.addcdiv_(m_hat, v_hat.sqrt().add_(self.eps), value=-self.lr)
 
-# ---------------- Tech Indicators ----------------
+# ---------------- Technical Indicators ----------------
 def rsi(series, n=14):
+    """Calculate Relative Strength Index"""
     d = series.diff()
     up = d.clip(lower=0); down = -d.clip(upper=0)
     ma_up = up.rolling(n, min_periods=n).mean()
@@ -122,6 +123,7 @@ def rsi(series, n=14):
     return 100 - (100/(1+rs))
 
 def macd(close, fast=12, slow=26, signal=9):
+    """Calculate MACD (Moving Average Convergence Divergence)"""
     ema_f = close.ewm(span=fast, adjust=False).mean()
     ema_s = close.ewm(span=slow, adjust=False).mean()
     line  = ema_f - ema_s
@@ -131,6 +133,7 @@ def macd(close, fast=12, slow=26, signal=9):
 
 # Online mean matching
 def online_mean_match(curr_rhat, ret_hist: deque, rhat_hist: deque):
+    """Adjust predicted returns by matching historical means"""
     if MEAN_MATCH_WIN is None or len(ret_hist) < MEAN_MATCH_MIN or len(rhat_hist) == 0:
         return float(curr_rhat)
     mu_true = float(np.mean(ret_hist))
@@ -139,6 +142,7 @@ def online_mean_match(curr_rhat, ret_hist: deque, rhat_hist: deque):
 
 # ---------------- CNN-BiLSTM Model ----------------
 class MultiScaleCNN(nn.Module):
+    """Multi-scale Convolutional Neural Network for feature extraction"""
     def __init__(self, input_size, filters, kernel_sizes, dropout=0.2):
         super(MultiScaleCNN, self).__init__()
         self.convs = nn.ModuleList()
@@ -216,15 +220,18 @@ class CNNBiLSTMClassifier(nn.Module):
         return logit.squeeze(1)            # (B,)
 
 def make_seq_2d_to_3d(X2d: np.ndarray, seq_len: int):
+    """Convert 2D array to 3D sequences for LSTM input"""
     Xs = []
     for i in range(seq_len-1, len(X2d)):
         Xs.append(X2d[i-seq_len+1:i+1, :])
     return np.stack(Xs) if len(Xs)>0 else np.zeros((0, seq_len, X2d.shape[1]), dtype=X2d.dtype)
 
 def align_y(y: np.ndarray, seq_len: int):
+    """Align target array with sequences"""
     return y[seq_len-1:]
 
 def get_by_key(series: pd.Series, key):
+    """Get value from series by index or label"""
     return series.iloc[key] if isinstance(key, (int, np.integer)) else series.loc[key]
 
 # ----------- Online Calibrator -----------
@@ -246,6 +253,7 @@ class OnlineCalibrator:
         self.sz = 0.0; self.sr = 0.0; self.szz = 0.0; self.szr = 0.0
 
     def _push(self, z, r):
+        """Add new observation to buffer"""
         self.buf.append((z, r))
         self.n  += 1
         self.sz += z
@@ -254,6 +262,7 @@ class OnlineCalibrator:
         self.szr += z*r
 
     def _pop_left(self):
+        """Remove oldest observations to maintain window size"""
         if self.win is None: 
             return
         while self.n > self.win:
@@ -265,11 +274,12 @@ class OnlineCalibrator:
             self.szr -= oldz*oldr
 
     def add(self, z, r):
+        """Add single observation and maintain window"""
         self._push(float(z), float(r))
         self._pop_left()
 
     def fit_from_arrays(self, z_arr, r_arr):
-        """Initialize with historical arrays (train+valid), trim to window; don't append to same deque during iteration."""
+        """Initialize with historical arrays (train+valid), trim to window"""
         if len(z_arr) != len(r_arr):
             raise ValueError("z_arr and r_arr must have the same length")
 
@@ -296,6 +306,7 @@ class OnlineCalibrator:
         self.szr = float(np.dot(zs, rs))
 
     def coef(self):
+        """Return calibration coefficients (a, b) using ridge regression"""
         if self.n < MIN_CAL_SAMPLES:
             return None
         n, sz, sr, szz, szr = self.n, self.sz, self.sr, self.szz, self.szr
@@ -313,6 +324,7 @@ class OnlineCalibrator:
 
 # ---------------- Training (Train+Valid only) ----------------
 def train_with_val(X_train3, y_train1, X_val3, y_val1, n_feat_for_model):
+    """Train model on training set with validation for early stopping"""
     ds_tr = torch.utils.data.TensorDataset(
         torch.from_numpy(X_train3.astype(np.float32)),
         torch.from_numpy(y_train1.astype(np.float32)))
@@ -371,6 +383,7 @@ def train_with_val(X_train3, y_train1, X_val3, y_val1, n_feat_for_model):
 
 @torch.no_grad()
 def predict_proba(model, X3):
+    """Predict probability of upward movement"""
     if len(X3) == 0: return np.array([], dtype=np.float32)
     tens = torch.from_numpy(X3.astype(np.float32)).to(device)
     return 1/(1+np.exp(-model(tens).cpu().numpy()))
@@ -413,12 +426,10 @@ for TICKER in tqdm(all_tickers[START_FROM_IDX:], desc=f"All tickers [{START_FROM
     y_ret = close_s.shift(-1)/close_s - 1.0
     y_cls = (y_ret > 0).astype(int)
 
-
-
-    # ----- Features: 只保留指定的17个特征 (all shift(1) to prevent leakage) -----
+    # ----- Features: Only keep specified 17 features (all shift(1) to prevent leakage) -----
     feat = pd.DataFrame(index=close_s.index)
     
-    # 1. 动量因子 (4)
+    # 1. Momentum factors (4)
     feat['ret_5d']    = close_s.pct_change(5)
     feat['ret_20d']   = close_s.pct_change(20)
     feat['ret_60d']   = close_s.pct_change(60)
@@ -426,7 +437,7 @@ for TICKER in tqdm(all_tickers[START_FROM_IDX:], desc=f"All tickers [{START_FROM
     ret20 = close_s.pct_change(20)
     feat['mom_accel'] = ret5 - ret20
     
-    # 2. 技术指标 (5)
+    # 2. Technical indicators (5)
     feat['RSI']        = rsi(close_s, 14) / 100.0
     m_line, m_sig, m_hist = macd(close_s)
     feat['MACD_hist']  = m_hist
@@ -445,47 +456,47 @@ for TICKER in tqdm(all_tickers[START_FROM_IDX:], desc=f"All tickers [{START_FROM
     ma60 = close_s.rolling(60).mean()
     feat['MA_align'] = ((ma5>ma10) & (ma10>ma20) & (ma20>ma60)).astype(float)
     
-    # 3. 波动率 (3)
+    # 3. Volatility (3)
     feat['vol_20d'] = close_s.pct_change().rolling(20).std()
     feat['vol_60d'] = close_s.pct_change().rolling(60).std()
     hl_range = np.log(high_s/low_s)
     feat['ATR']     = hl_range.rolling(14).mean()
     
-    # 4. 成交量 (2)
+    # 4. Volume (2)
     vol_ma20 = vol_s.rolling(20).mean()
     feat['volume_ratio'] = np.where(vol_ma20>0, vol_s/vol_ma20, 1.0)
     feat['volume_mom']   = vol_s.pct_change(5)
     
-    # 5. 价格位置 (2)
+    # 5. Price position (2)
     high_52w = high_s.rolling(252, min_periods=60).max()
     low_52w  = low_s.rolling(252, min_periods=60).min()
     range_52w = high_52w - low_52w
     feat['52w_position'] = np.where(range_52w>0, (close_s - low_52w)/range_52w, 0.5)
     feat['from_52w_high'] = (close_s - high_52w)/high_52w
     
-    # 6. 微观结构 (1)
+    # 6. Microstructure (1)
     feat['hl_spread'] = (high_s - low_s)/close_s
 
-    # 只保留这17个特征
+    # Keep only these 17 features
     selected_features = [
-        # 动量因子 (4)
+        # Momentum factors (4)
         "ret_5d", "ret_20d", "ret_60d", "mom_accel",
-        # 技术指标 (5)
+        # Technical indicators (5)
         "RSI", "MACD_hist", "MA20_bias", "BB_position", "MA_align",
-        # 波动率 (3)
+        # Volatility (3)
         "vol_20d", "vol_60d", "ATR",
-        # 成交量 (2)
+        # Volume (2)
         "volume_ratio", "volume_mom",
-        # 价格位置 (2)
+        # Price position (2)
         "52w_position", "from_52w_high",
-        # 微观结构 (1)
+        # Microstructure (1)
         "hl_spread"
     ]
     feat = feat[selected_features].copy()
 
     feat = feat.shift(1)  # Prevent leakage
 
-    # ----- Align -----
+    # ----- Align data -----
     data = pd.concat([feat, y_ret.rename("y_ret"), y_cls.rename("y_cls"), close_s.rename("close")], axis=1).dropna()
     if data.shape[0] < (SEQ_LEN + MIN_TRAIN_DAYS + 10):
         print(f"\n[{TICKER}] not enough aligned samples, skip."); continue
@@ -497,7 +508,7 @@ for TICKER in tqdm(all_tickers[START_FROM_IDX:], desc=f"All tickers [{START_FROM
     dates = X_all.index
     n_feat = X_all.shape[1]
 
-    # ----- Split (by date) -----
+    # ----- Split data by date -----
     train_idx = dates[dates <= pd.Timestamp(TRAIN_END)]
     val_idx   = dates[(dates > pd.Timestamp(TRAIN_END)) & (dates <= pd.Timestamp(VAL_END))]
     test_idx  = dates[dates > pd.Timestamp(VAL_END)]
@@ -586,7 +597,6 @@ for TICKER in tqdm(all_tickers[START_FROM_IDX:], desc=f"All tickers [{START_FROM
     P0 = float(close_oos.iloc[0])
     pred_factor = (1.0 + pred_rhat.loc[valid]).cumprod().shift(1).fillna(1.0)
     pred_price  = pd.Series(P0, index=pred_factor.index) * pred_factor
-
 
     # Scheme A: rebasing by blocks (for display/statistics only)
     dfp = pd.DataFrame({"actual": close_oos, "pred": pred_price}).dropna().copy()
